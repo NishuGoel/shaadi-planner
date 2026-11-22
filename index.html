@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#B8125A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Shaadi Planner</title>
+<style>html{box-sizing:border-box;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
+</head>
+<body>
+<!-- app -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind:wght@400;500;600&family=Rozha+One&display=swap">
+<style>
+/* Layout: one question per screen in a left-aligned 680px column; a bead garland on top tracks progress. After the wizard, three tabs: plan, checklist, payments. */
+:root{
+  --bg:#FFF8FA; --surface:#FFFFFF; --fg:#2B1026; --muted:#7A5E72; --line:#EBD6E0;
+  --accent:#B8125A; --accent-fg:#FFFFFF; --gold:#E09A00; --ok:#2F7D4F; --over:#C7361B;
+  --display:"Rozha One","Georgia",serif; --body:"Hind","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1C0E19; --surface:#2A1626; --fg:#F7E9F1; --muted:#B89AAE; --line:#44283D;
+  --accent:#F0508F; --accent-fg:#1C0E19; --gold:#F5B83D; --ok:#6CC08B; --over:#FF7A5C; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#1C0E19; --surface:#2A1626; --fg:#F7E9F1; --muted:#B89AAE; --line:#44283D;
+  --accent:#F0508F; --accent-fg:#1C0E19; --gold:#F5B83D; --ok:#6CC08B; --over:#FF7A5C; color-scheme:dark }
+
+html,body{height:100%}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--fg);font:400 16px/1.5 var(--body)}
+*,*::before,*::after{box-sizing:border-box}
+.wrap{width:100%;max-width:680px;margin-inline:auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.top .wrap{display:flex;align-items:center;gap:12px;padding-block:14px}
+.brand{font:400 1.1rem var(--display);color:var(--accent);flex:none}
+.garland{display:flex;gap:3px;flex:1;min-width:0;justify-content:flex-end;overflow:hidden}
+.garland i{width:8px;height:8px;border-radius:50%;background:var(--line);flex:none}
+.garland i.done{background:var(--gold)}
+.garland i.now{background:var(--accent)}
+.count{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+main{flex:1;min-height:0;overflow-y:auto}
+#step{padding-block:24px 32px;display:flex;flex-direction:column;gap:16px;animation:in .25s ease-out}
+@keyframes in{from{opacity:0;transform:translateY(8px)}}
+@media (prefers-reduced-motion: reduce){#step{animation:none}}
+.eyebrow{margin:0;font-size:.78rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+h1{margin:0;font:400 clamp(1.7rem,5vw,2.4rem)/1.15 var(--display);text-wrap:balance}
+h2{margin:8px 0 0;font:400 1.25rem var(--display)}
+.lede{margin:0;color:var(--muted);max-width:60ch}
+label{font-weight:500;font-size:.9rem;color:var(--muted)}
+.field{display:flex;flex-direction:column;gap:4px}
+.field input,.field select,.money{border:0;border-bottom:2px solid var(--line);background:transparent;font-size:1.4rem;padding:6px 0;width:100%;border-radius:0}
+.field input:focus,.field select:focus,.money:focus-within{outline:0;border-color:var(--accent)}
+.money{display:flex;align-items:baseline;gap:6px}
+.money span{color:var(--muted);font-size:1.4rem}
+.money input{border:0;background:transparent;font-size:1.6rem;font-weight:600;width:100%;min-width:0;padding:0;font-variant-numeric:tabular-nums}
+.money input:focus{outline:0}
+.money.sm{width:9rem;flex:none;padding:2px 0}
+.money.sm span,.money.sm input{font-size:1.05rem}
+.echo{margin:0;font-size:.9rem;color:var(--muted);min-height:1.5em}
+.err{margin:0;color:var(--over);font-weight:500;min-height:1.5em}
+
+.opts{display:grid;gap:10px}
+.opts.two{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.opt{display:grid;gap:2px;text-align:left;padding:14px 16px;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;cursor:pointer;min-width:0}
+.opt b{font-weight:600}
+.opt span{color:var(--muted);font-size:.92rem}
+.opt em{font-style:normal;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
+.opt:hover,.chip:hover{border-color:var(--accent)}
+.opt[aria-pressed="true"],.chip[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:6px 14px;border:1.5px solid var(--line);border-radius:999px;background:var(--surface);cursor:pointer}
+.link{background:none;border:0;padding:0;color:var(--muted);text-decoration:underline;cursor:pointer;align-self:flex-start}
+
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.fact{display:grid;text-align:left;background:none;border:0;padding:0;min-width:0}
+.fact small{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.fact b{font-weight:600;overflow-wrap:anywhere}
+button.fact{cursor:pointer}
+button.fact:hover b{color:var(--accent)}
+.rows{display:grid}
+.row{position:relative;display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px 16px;text-align:left;padding:12px 0 14px;background:none;border:0;border-bottom:1px solid var(--line)}
+button.row{cursor:pointer}
+.row small{display:block;color:var(--muted);font-size:.85rem;font-weight:400}
+.row .rn{font-weight:600;min-width:0;flex:1}
+.row .ra{font-weight:600;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.row i{position:absolute;left:0;bottom:-1px;height:3px;width:var(--w);background:var(--gold)}
+button.row:hover .rn{color:var(--accent)}
+.total{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px;font-size:1.1rem}
+.total b{font:400 1.8rem var(--display);font-variant-numeric:tabular-nums}
+.pill{padding:2px 12px;border-radius:999px;font-size:.85rem;font-weight:600;border:1.5px solid currentColor}
+.ok{color:var(--ok)} .over{color:var(--over)}
+.actions{display:flex;flex-wrap:wrap;align-items:center;gap:16px}
+textarea{width:100%;min-height:160px;background:var(--surface);border:1.5px solid var(--line);border-radius:8px;padding:10px}
+.task{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);font-size:1rem;color:var(--fg);font-weight:400;cursor:pointer}
+.task input{width:20px;height:20px;margin-top:2px;accent-color:var(--accent);flex:none}
+.task small{display:block;color:var(--muted);font-size:.85rem}
+.task input:checked+span{color:var(--muted);text-decoration:line-through}
+.pay{display:grid;gap:14px;padding:16px;background:var(--surface);border:1.5px solid var(--line);border-radius:12px}
+.pay .field input,.pay .field select{font-size:1.1rem}
+.pay .task{border:0;padding:0}
+.pay .btn{justify-self:start}
+
+.bar{border-top:1px solid var(--line);background:var(--surface)}
+.bar .wrap{padding-block:10px;display:flex;flex-direction:column;gap:8px}
+.meter{display:flex;flex-direction:column;gap:4px;font-size:.85rem;font-variant-numeric:tabular-nums}
+.meter div{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.track{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.track span{display:block;height:100%;background:var(--ok);width:0;transition:width .2s}
+.track span.over{background:var(--over)}
+.nav{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.btn{display:inline-block;padding:10px 22px;border-radius:999px;border:0;background:var(--accent);color:var(--accent-fg);font-weight:600;cursor:pointer;text-decoration:none}
+.btn.ghost{background:none;color:var(--fg);border:1.5px solid var(--line)}
+.hint{font-size:.8rem;color:var(--muted)}
+@media (max-width:480px){.hint{display:none}}
+.tabs{display:flex;gap:8px}
+.tabs button{flex:1;padding:8px 4px;border-radius:999px;border:1.5px solid transparent;background:none;font-weight:600;color:var(--muted);cursor:pointer}
+.tabs button[aria-pressed="true"]{color:var(--accent);border-color:var(--accent)}
+</style>
+
+<header class="top"><div class="wrap">
+  <span class="brand">Shaadi Planner</span>
+  <div class="garland" id="garland" aria-hidden="true"></div>
+  <span class="count" id="count"></span>
+</div></header>
+
+<main id="main"><div class="wrap"><div id="step"></div></div></main>
+
+<footer class="bar"><div class="wrap">
+  <div class="meter" id="meter" hidden>
+    <div><span id="meter-text"></span><b id="meter-status"></b></div>
+    <div class="track"><span id="meter-fill"></span></div>
+  </div>
+  <div class="nav" id="nav">
+    <button type="button" class="btn ghost" id="back">Back</button>
+    <span class="hint">Press Enter to continue</span>
+    <button type="button" class="btn" id="next">Next</button>
+  </div>
+  <div class="tabs" id="tabs" hidden>
+    <button type="button" data-tab="plan">Plan</button>
+    <button type="button" data-tab="tasks">Checklist</button>
+    <button type="button" data-tab="pay">Payments</button>
+  </div>
+</div></footer>
+
+<script>
+const KEY = 'shaadi-plan-v1';
+const blank = () => ({ i: 0, ret: false, tab: 'plan', you: '', partner: '', tradition: '', month: '', city: '', guests: 0, total: 0, style: '',
+  functions: null, items: {}, fnBudget: {}, tasks: {}, pay: [] });
+let S = blank();
+try { Object.assign(S, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = v => +String(v).replace(/\D/g, '') || 0;
+const fmt = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const trim = x => String(+x.toFixed(2));
+const words = n => n >= 1e7 ? trim(n / 1e7) + ' crore' : n >= 1e5 ? trim(n / 1e5) + ' lakh' : n >= 1e3 ? trim(n / 1e3) + ' thousand' : String(n);
+const round1k = n => Math.round(n / 1000) * 1000;
+
+// [name, what it is, selected by default, weight when splitting the event budget across functions]
+const FUNCTIONS = {
+  hindu: [
+    ['Roka / Sagai', 'Families formalise the match and the couple exchange rings', 1, 10],
+    ['Tilak', "The bride's family honours the groom at his home", 0, 4],
+    ['Ganesh Puja', 'A prayer for a wedding free of obstacles', 0, 2],
+    ['Mehendi', 'Henna for the bride and the women of the family', 1, 8],
+    ['Haldi', 'Turmeric paste applied to the bride and groom', 1, 5],
+    ['Sangeet', 'An evening of family dance performances', 1, 15],
+    ['Baraat & Jaimala', "The groom's procession arrives and the couple exchange garlands", 1, 15],
+    ['Pheras', 'Kanyadaan, seven rounds of the sacred fire, sindoor', 1, 20],
+    ['Vidaai', "The bride's farewell from her family", 1, 1],
+    ['Reception', 'Dinner hosted for the wider circle', 1, 20],
+    ['Griha Pravesh', 'The bride is welcomed into her new home', 0, 2],
+  ],
+  punjabi: [
+    ['Roka', 'Both families agree to the match with shagun', 1, 6],
+    ['Chunni Chadhai', "The groom's family drapes a red chunni on the bride", 0, 4],
+    ['Sagai / Kurmai', 'The ring ceremony', 1, 10],
+    ['Mehendi', 'Henna for the bride and the women of the family', 1, 8],
+    ['Sangeet & Jaggo', 'Dance night, then the family carries lit pots through the lanes singing', 1, 15],
+    ['Vatna (Haldi)', 'Turmeric paste applied to the bride and groom', 1, 4],
+    ['Chooda & Kalire', "The bride's mama gives her the red and white bangles", 1, 3],
+    ['Sehrabandi & Ghodi Chadhai', "The groom's sehra is tied and he mounts the mare", 1, 3],
+    ['Baraat & Milni', 'The procession arrives and the two families greet each other with garlands', 1, 12],
+    ['Jaimala & Pheras / Anand Karaj', 'Garlands, then pheras around the fire or laavan at the gurdwara', 1, 22],
+    ['Doli', "The bride's farewell from her family", 1, 1],
+    ['Reception', 'Dinner hosted for the wider circle', 1, 20],
+  ],
+};
+
+const STYLES = [
+  { id: 'home', name: 'At home or a temple', desc: 'Close family, simple rituals, a hall or courtyard nearby', mult: { venue: .5, logistics: .5, decor: .8 } },
+  { id: 'banquet', name: 'Banquet hall', desc: 'The classic city wedding: one venue, buffet dinner, stage and mandap', mult: {} },
+  { id: 'farmhouse', name: 'Farmhouse or lawn', desc: 'Open-air functions over two or three days with bigger decor', mult: { venue: 1.2, decor: 1.2 } },
+  { id: 'destination', name: 'Destination', desc: 'Everyone travels to Jaipur, Udaipur, Goa or the hills and stays together', mult: { venue: 1.3, logistics: 3 } },
+];
+
+const TIER = ['Simple', 'Classic', 'Lavish'];
+const TIER_MULT = [.6, 1, 1.6];
+const SIDE = { bride: "Bride's side", groom: "Groom's side", both: 'Shared' };
+// ponytail: pct is a rough typical split, not market data; replace with per-city vendor rates when we have them. Must add up to 100.
+const CATS = [
+  { id: 'venue', name: 'Venue', q: 'Where will the functions happen?', covers: 'Hall or lawn rental for every function, power backup, parking.', pct: 15,
+    tiers: ['Home, community hall or temple', 'Banquet hall or hotel lawn', 'Farmhouse, five-star hotel or palace'] },
+  { id: 'catering', name: 'Catering', q: 'What will you feed your guests?', covers: 'Food and drinks across all functions. Caterers quote per plate.', pct: 25,
+    tiers: ['Vegetarian buffet by a halwai', 'Buffet with live counters and chaat', 'Multi-cuisine spread, live counters and a bar'] },
+  { id: 'decor', name: 'Decor', q: 'How should it look?', covers: 'Mandap, stage, entry, flowers and lighting.', pct: 10,
+    tiers: ['Genda phool, drapes and a simple mandap', 'Themed stage, mandap and entry', 'Designer mandap and florals for every function'] },
+  { id: 'photo', name: 'Photo & video', q: 'How will you remember it?', covers: 'Photographers, videographers, albums and films.', pct: 7,
+    tiers: ['One photographer and a traditional album', 'Candid and traditional team, highlight film', 'Full crew, drone, pre-wedding shoot, same-day edit'] },
+  { id: 'outfits', name: 'Outfits', q: 'What will you both wear?', covers: 'Lehenga, sherwani, outfits for each function and for close family.', pct: 10,
+    tiers: ['Ready-made or rented outfits', 'Boutique lehenga and sherwani', 'Designer outfits for every function'] },
+  { id: 'jewellery', name: 'Jewellery', q: 'How much new jewellery?', covers: 'Bridal set, rings, gold given to family.', pct: 10,
+    tiers: ['Family jewellery plus a few new pieces', 'A new bridal set', 'Bridal set and gold for close family'] },
+  { id: 'beauty', name: 'Mehendi & makeup', q: 'Who gets you ready?', covers: 'Mehendi artist, bridal makeup, hair, grooming for the groom.', pct: 3,
+    tiers: ['Local parlour and mehendi artist', 'Professional bridal artist for the main day', 'Artist for every function, plus family makeup'] },
+  { id: 'music', name: 'Music & sangeet', q: 'How loud is the party?', covers: 'DJ, sound, dhol, choreographer, anchor, performers.', pct: 5,
+    tiers: ['A playlist, speakers and a dhol', 'DJ, sound and a sangeet choreographer', 'Live band, anchor and a guest artist'] },
+  { id: 'baraat', name: 'Baraat', q: 'How does the groom arrive?', covers: 'Ghodi, band-baaja, lights, safas for the baraatis.', pct: 2,
+    tiers: ['Ghodi and dhol', 'Ghodi, band-baaja and lights', 'Baggi or vintage car, band and fireworks'] },
+  { id: 'invites', name: 'Invites & gifts', q: 'How will you invite and thank people?', covers: 'Cards, mithai boxes, shagun, return gifts, milni gifts.', pct: 4,
+    tiers: ['Digital invite and mithai boxes', 'Printed cards and return gifts', 'Designer boxes and hampers for every guest'] },
+  { id: 'rituals', name: 'Rituals', q: 'What do the ceremonies need?', covers: 'Pandit ji or granthi, puja samagri, varmala, sehra, chooda and kalire.', pct: 1,
+    tiers: ['Pandit ji and basic samagri', 'Pandit ji, full samagri and fresh varmalas', 'A senior pandit, premium varmalas and havan setup'] },
+  { id: 'logistics', name: 'Guest stay & travel', q: 'Who looks after outstation guests?', covers: 'Hotel rooms, buses and cars, airport and station pickups.', pct: 5,
+    tiers: ['Guests arrange their own stay', 'Rooms for outstation family, a bus for the baraat', 'Hotel block for all guests with pickups'] },
+  { id: 'buffer', name: 'Cushion', q: 'How much do you keep aside?', covers: 'Last-minute guests, tips, and everything nobody planned for.', pct: 3,
+    tiers: ['A tight cushion', 'A sensible cushion', 'A comfortable cushion'] },
+];
+console.assert(CATS.reduce((a, c) => a + c.pct, 0) === 100, 'category shares must add up to 100');
+const EVENT = ['venue', 'catering', 'decor', 'photo', 'music']; // heads that are spent function by function
+
+// [months before the wedding, task, category it belongs to]. ponytail: done-state is keyed by index, so only append to this list.
+const TASKS = [
+  [9, 'Ask pandit ji or the gurdwara for muhurat dates and fix one', null],
+  [8, 'Shortlist and book the venue', 'venue'],
+  [7, 'Book the caterer and schedule a tasting', 'catering'],
+  [7, 'Book the photographer and videographer', 'photo'],
+  [6, 'Book the decorator and agree the mandap design', 'decor'],
+  [6, 'Block hotel rooms for outstation guests', 'logistics'],
+  [5, 'Order the lehenga and sherwani, leaving time for fittings', 'outfits'],
+  [5, 'Choose and order jewellery', 'jewellery'],
+  [4, 'Book makeup and mehendi artists and do a trial', 'beauty'],
+  [4, 'Book the DJ, dhol and sangeet choreographer', 'music'],
+  [3, 'Finalise the guest list with both families', null],
+  [3, 'Design and order invitations and mithai boxes', 'invites'],
+  [2, 'Book the ghodi, band and safas for the baraat', 'baraat'],
+  [2, 'Send the invitations', null],
+  [1, 'Confirm pandit ji and buy the puja samagri', 'rituals'],
+  [1, 'Arrange buses and cars for guests and the baraat', 'logistics'],
+  [1, 'Final outfit fittings', 'outfits'],
+  [.5, 'Give the caterer the final guest count', 'catering'],
+  [.25, 'Pay vendor balances and keep cash ready for shagun and tips', null],
+  [.25, 'Book the marriage registration appointment', null],
+];
+
+const styleOf = () => STYLES.find(s => s.id === S.style) || STYLES[1];
+function suggest(c) {
+  const m = styleOf().mult, w = x => x.pct * (m[x.id] || 1);
+  return round1k(S.total * w(c) / CATS.reduce((a, x) => a + w(x), 0));
+}
+const tierAmt = (c, k) => round1k(suggest(c) * TIER_MULT[k]);
+const item = id => S.items[id] || { tier: -1, budget: 0 };
+const allocated = () => CATS.reduce((a, c) => a + item(c.id).budget, 0);
+const fnList = () => FUNCTIONS[S.tradition] || FUNCTIONS.hindu;
+const picked = () => S.functions || fnList().filter(f => f[2]).map(f => f[0]);
+const pool = () => EVENT.reduce((a, id) => a + item(id).budget, 0);
+// ponytail: one number per function, split from the event pool by weight. Full function x head matrix if users ask for it.
+function fnBudget(name) {
+  if (name in S.fnBudget) return S.fnBudget[name];
+  const fs = fnList().filter(f => picked().includes(f[0])), sum = fs.reduce((a, f) => a + f[3], 0), f = fs.find(f => f[0] === name);
+  return f && sum ? round1k(pool() * f[3] / sum) : 0;
+}
+const fnSumText = () => `Functions add up to ${fmt(picked().reduce((a, n) => a + fnBudget(n), 0))}. Your venue, catering, decor, photo and music budgets add up to ${fmt(pool())}.`;
+const sides = () => CATS.reduce((a, c) => { const it = item(c.id), s = it.side || 'both'; if (s === 'both') { a.bride += it.budget / 2; a.groom += it.budget / 2; } else a[s] += it.budget; return a; }, { bride: 0, groom: 0 });
+const booked = id => S.pay.filter(p => p.c === id).reduce((a, p) => a + p.a, 0);
+const perGuest = n => S.guests ? ' · about ' + fmt(n / S.guests) + ' per guest' : '';
+const chips = (f, list) => `<div class="chips">${list.map(([v, l]) => `<button type="button" class="chip" data-chip="${f}:${v}">${l}</button>`).join('')}</div>`;
+const fact = (label, value, go) => go === undefined ? `<div class="fact"><small>${label}</small><b>${value}</b></div>` : `<button type="button" class="fact" data-go="${go}"><small>${label}</small><b>${value}</b></button>`;
+
+const STEPS = [
+  { html: () => `<p class="eyebrow">Badhai ho!</p><h1>Who is getting married?</h1>
+      <p class="lede">Answer one question at a time. You set a budget for every part of the wedding and get the full plan, a checklist and a payment tracker at the end.</p>
+      <div class="field"><label for="you">Your name</label><input id="you" data-f="you" autocomplete="given-name" placeholder="Meera" value="${esc(S.you)}"></div>
+      <div class="field"><label for="partner">Your partner's name</label><input id="partner" data-f="partner" placeholder="Arjun" value="${esc(S.partner)}"></div>`,
+    valid: () => (S.you.trim() && S.partner.trim()) ? '' : 'Enter both names to continue.' },
+
+  { html: () => `<h1>${esc(S.you)}, which traditions will your wedding follow?</h1>
+      <div class="opts two">
+        <button type="button" class="opt" data-pick="tradition:hindu" aria-pressed="${S.tradition === 'hindu'}"><b>Hindu</b><span>Haldi, baraat, jaimala and saat phere around the fire</span></button>
+        <button type="button" class="opt" data-pick="tradition:punjabi" aria-pressed="${S.tradition === 'punjabi'}"><b>Punjabi</b><span>Roka, chooda and kalire, jaggo, milni, then pheras or Anand Karaj</span></button>
+      </div>`,
+    valid: () => S.tradition ? '' : 'Pick one to continue.' },
+
+  { html: () => `<h1>When and where?</h1><p class="lede">Not fixed yet? Leave it blank and move on.</p>
+      <div class="field"><label for="month">Wedding month</label><input id="month" type="month" data-f="month" value="${esc(S.month)}"></div>
+      <div class="field"><label for="city">City</label><input id="city" data-f="city" placeholder="Ludhiana" value="${esc(S.city)}"></div>` },
+
+  { html: () => `<h1>How many guests are you expecting?</h1><p class="lede">Count the biggest function, usually the wedding dinner or reception.</p>
+      ${chips('guests', [[50, '50'], [150, '150'], [300, '300'], [500, '500'], [800, '800']])}
+      <div class="field"><label for="guests">Guests</label><input id="guests" inputmode="numeric" data-f="guests" data-num value="${S.guests || ''}"></div>`,
+    valid: () => S.guests > 0 ? '' : 'Enter a guest count to continue.' },
+
+  { html: () => `<h1>What is your total budget?</h1><p class="lede">Everything included, both families together. You will divide it across ${CATS.length} heads next, and you can change any of them.</p>
+      ${chips('total', [[5e5, '5 lakh'], [1e6, '10 lakh'], [15e5, '15 lakh'], [25e5, '25 lakh'], [5e6, '50 lakh'], [1e7, '1 crore']])}
+      <label for="total">Total budget</label>
+      <div class="money"><span>₹</span><input id="total" inputmode="numeric" data-f="total" data-num value="${S.total || ''}"></div>`,
+    echo: () => S.total ? words(S.total) + perGuest(S.total) : '',
+    valid: () => S.total > 0 ? '' : 'Enter a budget to continue.' },
+
+  { html: () => `<h1>What kind of wedding do you picture?</h1><p class="lede">This shifts how your budget is split between venue, decor and guest travel.</p>
+      <div class="opts">${STYLES.map(s => `<button type="button" class="opt" data-pick="style:${s.id}" aria-pressed="${S.style === s.id}"><b>${s.name}</b><span>${s.desc}</span></button>`).join('')}</div>`,
+    valid: () => S.style ? '' : 'Pick one to continue.' },
+
+  { html: () => { const p = picked(); return `<h1>Which functions will you host?</h1><p class="lede">Tap to add or remove. The usual ones are already selected.</p>
+      <div class="opts two">${fnList().map(f => `<button type="button" class="opt" data-fn="${esc(f[0])}" aria-pressed="${p.includes(f[0])}"><b>${f[0]}</b><span>${f[1]}</span></button>`).join('')}</div>`; },
+    echo: () => picked().length + ' functions selected' },
+
+  ...CATS.map((c, n) => ({
+    html: () => {
+      if (!S.items[c.id]) S.items[c.id] = { tier: 1, budget: suggest(c), side: 'both' };
+      const it = S.items[c.id];
+      return `<p class="eyebrow">Budget ${n + 1} of ${CATS.length} · ${c.name}</p><h1>${c.q}</h1><p class="lede">${c.covers}</p>
+        <div class="opts">${c.tiers.map((t, k) => `<button type="button" class="opt" data-tier="${k}" aria-pressed="${it.tier === k}"><b>${TIER[k]}</b><span>${t}</span><em>${fmt(tierAmt(c, k))}</em></button>`).join('')}</div>
+        <label for="b-${c.id}">Your budget for ${c.name.toLowerCase()}</label>
+        <div class="money"><span>₹</span><input id="b-${c.id}" inputmode="numeric" data-cat="${c.id}" value="${it.budget || ''}"></div>
+        <p class="echo" id="echo"></p>
+        <label>Who pays?</label>
+        <div class="chips" role="group" aria-label="Who pays">${Object.keys(SIDE).map(s => `<button type="button" class="chip" data-side="${s}" aria-pressed="${(it.side || 'both') === s}">${SIDE[s]}</button>`).join('')}</div>
+        <button type="button" class="link" data-tier="-1">We don't need this</button>`;
+    },
+    echo: () => { const b = S.items[c.id].budget; if (!b) return 'Not in the plan'; return words(b) + ' · ' + trim(b / S.total * 100) + '% of your total' + (c.id === 'catering' ? perGuest(b) : ''); },
+  })),
+
+  { summary: true, html: () => ({ plan: planTab, tasks: tasksTab, pay: payTab }[S.tab] || planTab)() },
+];
+const FIRST_CAT = STEPS.length - 1 - CATS.length;
+
+function verdict() {
+  const n = [0, 0, 0];
+  CATS.forEach(c => { const t = item(c.id).tier; if (t >= 0) n[t]++; });
+  const k = n.indexOf(Math.max(...n));
+  return `A ${TIER[k].toLowerCase()} ${S.tradition === 'punjabi' ? 'Punjabi' : 'Hindu'} wedding for ${S.guests.toLocaleString('en-IN')} guests (${styleOf().name.toLowerCase()}), at about ${fmt(allocated() / (S.guests || 1))} per guest.`;
+}
+const when = () => S.month ? new Date(S.month + '-01').toLocaleString('en-IN', { month: 'long', year: 'numeric' }) : 'Not fixed';
+const diffText = () => { const d = S.total - allocated(); return d < 0 ? 'Over by ' + fmt(-d) : fmt(d) + ' left'; };
+
+function planTab() {
+  const alloc = allocated(), over = alloc > S.total, sd = sides();
+  return `<p class="eyebrow">Your plan</p><h1>${esc(S.you)} &amp; ${esc(S.partner)}</h1><p class="lede">${verdict()}</p>
+    <div class="facts">${fact('When', when(), 2)}${fact('Where', esc(S.city) || 'Not fixed', 2)}${fact('Guests', S.guests.toLocaleString('en-IN'), 3)}${fact('Total budget', fmt(S.total), 4)}</div>
+    <h2>Budget by head</h2><p class="lede">Tap a row or any detail above to change it.</p>
+    <div class="rows">${CATS.map((c, n) => { const it = item(c.id), p = S.total ? it.budget / S.total * 100 : 0, bk = booked(c.id);
+      return `<button type="button" class="row" data-go="${FIRST_CAT + n}"><span class="rn">${c.name}<small>${it.tier >= 0 ? c.tiers[it.tier] + ' · ' + SIDE[it.side || 'both'] : 'Not in the plan'}</small>${bk ? `<small class="${bk > it.budget ? 'over' : ''}">Booked ${fmt(bk)}</small>` : ''}</span><span class="ra">${fmt(it.budget)}<small>${trim(p)}%</small></span><i style="--w:${Math.min(p, 100)}%"></i></button>`; }).join('')}</div>
+    <div class="total"><span>Planned</span><b>${fmt(alloc)}</b><span class="pill ${over ? 'over' : 'ok'}">${diffText()}</span></div>
+    <div class="facts">${fact("Bride's side pays", fmt(sd.bride))}${fact("Groom's side pays", fmt(sd.groom))}</div>
+    <h2>Budget by function</h2><p class="lede" id="fn-sum"></p>
+    <div class="rows">${picked().map((f, k) => `<div class="row"><label class="rn" for="fb-${k}">${f}</label><div class="money sm"><span>₹</span><input id="fb-${k}" inputmode="numeric" data-fnb="${esc(f)}" value="${fnBudget(f) || ''}"></div></div>`).join('')}</div>
+    <button type="button" class="link" data-go="6">Change functions</button>
+    <div class="actions"><a class="btn" id="wa" target="_blank" rel="noopener" href="https://wa.me/">Share on WhatsApp</a><button type="button" class="btn ghost" id="copy">Copy plan</button><button type="button" class="link" id="reset">Start over</button></div>
+    <textarea id="plan-text" readonly hidden aria-label="Your plan as text"></textarea>`;
+}
+
+function due(m) {
+  if (m < 1) return m === .5 ? '2 weeks before' : '1 week before';
+  if (!S.month) return m + (m === 1 ? ' month before' : ' months before');
+  const d = new Date(S.month + '-01'); d.setMonth(d.getMonth() - m);
+  return 'By ' + d.toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+}
+const myTasks = () => TASKS.map((t, k) => [k, ...t]).filter(t => !t[3] || item(t[3]).tier >= 0);
+const taskCount = () => { const ts = myTasks(); return `${ts.filter(t => S.tasks[t[0]]).length} of ${ts.length} done`; };
+function tasksTab() {
+  return `<p class="eyebrow">Checklist</p><h1>What to book, and when</h1>
+    <p class="lede">${S.month ? 'Dates count back from ' + when() + '.' : 'Set a wedding month in your plan to see dates.'} Heads you skipped are left out.</p>
+    <p class="echo" id="task-count"></p>
+    <div>${myTasks().map(([k, m, text]) => `<label class="task" for="t-${k}"><input type="checkbox" id="t-${k}" data-task="${k}" ${S.tasks[k] ? 'checked' : ''}><span>${text}<small>${due(m)}</small></span></label>`).join('')}</div>`;
+}
+
+function payTab() {
+  const all = S.pay.reduce((a, p) => a + p.a, 0), paid = S.pay.filter(p => p.p).reduce((a, p) => a + p.a, 0);
+  return `<p class="eyebrow">Payments</p><h1>What you have booked and paid</h1>
+    <div class="facts">${fact('Booked', fmt(all))}${fact('Paid', fmt(paid))}${fact('Still due', fmt(all - paid))}${fact('Budget', fmt(S.total))}</div>
+    ${all > S.total ? `<p class="err">Bookings are over your budget by ${fmt(all - S.total)}.</p>` : ''}
+    <form class="pay" id="pay-form">
+      <div class="field"><label for="pay-cat">For</label><select id="pay-cat">${CATS.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+      <div class="field"><label for="pay-vendor">Vendor</label><input id="pay-vendor" placeholder="Royal Banquet"></div>
+      <div class="field"><label for="pay-amount">Amount (₹)</label><input id="pay-amount" inputmode="numeric" placeholder="50000"></div>
+      <label class="task" for="pay-paid"><input type="checkbox" id="pay-paid"><span>Already paid</span></label>
+      <button class="btn">Add payment</button>
+    </form>
+    <div class="rows">${S.pay.length ? S.pay.map((p, k) => `<div class="row"><span class="rn">${esc(p.v)}<small>${(CATS.find(c => c.id === p.c) || {}).name || ''}</small></span><span class="ra">${fmt(p.a)}</span>
+      <button type="button" class="chip ${p.p ? 'ok' : 'over'}" data-paid="${k}" aria-label="Mark as ${p.p ? 'due' : 'paid'}">${p.p ? 'Paid' : 'Due'}</button><button type="button" class="link" data-del="${k}">Remove</button></div>`).join('')
+      : '<p class="lede">Nothing yet. Add each advance or balance as you agree it with a vendor; tap Due to mark it paid.</p>'}</div>`;
+}
+
+function planText() {
+  const sd = sides();
+  return [`${S.you} & ${S.partner}`, verdict(), `When: ${when()} | Where: ${S.city || 'Not fixed'}`, '', 'BUDGET BY HEAD',
+    ...CATS.map(c => { const it = item(c.id); return `${c.name}: ${fmt(it.budget)}${it.tier >= 0 ? ' (' + c.tiers[it.tier] + ', ' + SIDE[it.side || 'both'] + ')' : ''}`; }),
+    '', `Planned: ${fmt(allocated())} of ${fmt(S.total)} (${diffText()})`, `Bride's side: ${fmt(sd.bride)} | Groom's side: ${fmt(sd.groom)}`,
+    '', 'BUDGET BY FUNCTION', ...picked().map(f => `${f}: ${fmt(fnBudget(f))}`)].join('\n');
+}
+
+const stepEl = $('#step');
+function refresh() {
+  const st = STEPS[S.i], set = (id, text) => { const el = $(id); if (el) el.textContent = text; };
+  set('#echo', st.echo ? st.echo() : '');
+  set('#err', '');
+  set('#fn-sum', fnSumText());
+  set('#task-count', taskCount());
+  const show = S.total > 0 && S.i >= FIRST_CAT && !st.summary;
+  $('#meter').hidden = !show;
+  if (show) {
+    const a = allocated(), over = a > S.total;
+    $('#meter-text').textContent = `${fmt(a)} planned of ${fmt(S.total)}`;
+    $('#meter-status').textContent = diffText();
+    $('#meter-status').className = over ? 'over' : 'ok';
+    $('#meter-fill').style.width = Math.min(a / S.total * 100, 100) + '%';
+    $('#meter-fill').className = over ? 'over' : '';
+  }
+}
+function render(focus) {
+  S.i = Math.max(0, Math.min(S.i, STEPS.length - 1));
+  const st = STEPS[S.i];
+  if (st.summary) S.ret = false;
+  const html = st.html();
+  stepEl.innerHTML = html + (html.includes('id="echo"') ? '' : '<p class="echo" id="echo"></p>') + '<p class="err" id="err" role="alert"></p>';
+  stepEl.style.animation = 'none'; stepEl.offsetWidth; stepEl.style.animation = '';
+  $('#garland').innerHTML = STEPS.map((_, k) => `<i class="${k < S.i ? 'done' : k === S.i ? 'now' : ''}"></i>`).join('');
+  $('#count').textContent = st.summary ? '' : `${S.i + 1} / ${STEPS.length}`;
+  $('#nav').hidden = !!st.summary;
+  $('#tabs').hidden = !st.summary;
+  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === S.tab));
+  $('#back').hidden = S.i === 0 || S.ret;
+  $('#next').textContent = S.ret ? 'Back to plan' : S.i === STEPS.length - 2 ? 'See my plan' : 'Next';
+  $('#main').scrollTop = 0;
+  save(); refresh();
+  if (focus && !st.summary) { const el = stepEl.querySelector('input'); if (el) el.focus(); }
+}
+function next() {
+  const st = STEPS[S.i], e = st.valid ? st.valid() : '';
+  if (e) { $('#err').textContent = e; return; }
+  if (st.summary) return;
+  if (S.ret) S.i = STEPS.length - 1; else S.i++;
+  render(true);
+}
+
+stepEl.addEventListener('input', e => {
+  const t = e.target, d = t.dataset;
+  if (d.cat) S.items[d.cat].budget = num(t.value);
+  else if (d.fnb) S.fnBudget[d.fnb] = num(t.value);
+  else if (d.task) S.tasks[d.task] = t.checked;
+  else if (d.f) S[d.f] = 'num' in d ? num(t.value) : t.value;
+  save(); refresh();
+});
+stepEl.addEventListener('submit', e => {
+  e.preventDefault();
+  const a = num($('#pay-amount').value), v = $('#pay-vendor').value.trim();
+  if (!a || !v) { $('#err').textContent = 'Enter a vendor and an amount.'; return; }
+  S.pay.push({ c: $('#pay-cat').value, v, a, p: $('#pay-paid').checked });
+  render();
+});
+stepEl.addEventListener('click', e => {
+  if (e.target.closest('#wa')) { e.target.closest('#wa').href = 'https://wa.me/?text=' + encodeURIComponent(planText()); return; }
+  const b = e.target.closest('button'); if (!b) return;
+  const d = b.dataset;
+  if (d.pick) { const [f, v] = d.pick.split(':'); if (f === 'tradition' && S.tradition !== v) { S.functions = null; S.fnBudget = {}; } S[f] = v; next(); }
+  else if (d.chip) { const [f, v] = d.chip.split(':'); S[f] = +v; render(); }
+  else if (d.fn) { const p = picked(); S.functions = p.includes(d.fn) ? p.filter(x => x !== d.fn) : fnList().map(f => f[0]).filter(x => x === d.fn || p.includes(x)); render(); }
+  else if (d.tier) { const c = CATS[S.i - FIRST_CAT], k = +d.tier; S.items[c.id] = { ...S.items[c.id], tier: k, budget: k < 0 ? 0 : tierAmt(c, k) }; render(); }
+  else if (d.side) { S.items[CATS[S.i - FIRST_CAT].id].side = d.side; render(); }
+  else if (d.go) { S.i = +d.go; S.ret = true; render(); }
+  else if (d.paid) { S.pay[d.paid].p = !S.pay[d.paid].p; render(); }
+  else if (d.del) { S.pay.splice(d.del, 1); render(); }
+  else if (b.id === 'copy') {
+    const text = planText();
+    navigator.clipboard.writeText(text).then(() => { b.textContent = 'Copied'; }).catch(() => { const ta = $('#plan-text'); ta.value = text; ta.hidden = false; ta.select(); });
+  }
+  else if (b.id === 'reset') {
+    if (d.sure) { S = blank(); render(); } else { d.sure = 1; b.textContent = 'Tap again to clear everything'; }
+  }
+});
+$('#next').addEventListener('click', next);
+$('#back').addEventListener('click', () => { S.i--; render(); });
+$('#tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.tab = b.dataset.tab; render(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && !STEPS[S.i].summary && !['BUTTON', 'TEXTAREA'].includes(e.target.tagName)) { e.preventDefault(); next(); } });
+render();
+</script>
+<!-- /app -->
+</body>
+</html>
